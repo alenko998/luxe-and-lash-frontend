@@ -492,7 +492,7 @@ export default function App() {
               ))}
             </div>
           </div>
-          <BookingForm user={user} openModal={openModal} />
+          <BookingForm key={user?.email || "guest"} user={user} openModal={openModal} />
         </div>
       </section>
 
