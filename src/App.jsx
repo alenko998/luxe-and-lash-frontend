@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+import { useAuth } from "./context/AuthContext";
+import { createAppointment, getMyAppointments, cancelAppointment } from "./api/appointments";
+import { forgotPassword } from "./api/auth";
 
 const NAV = [
   { id: "home",     label: "Home" },
@@ -42,7 +45,6 @@ const CSS = `
   html { scroll-behavior: smooth; }
   body { font-family: var(--fb); background: var(--bg); color: var(--ink); }
 
-  /* ── NAVBAR ── */
   .nav {
     position: sticky; top: 0; z-index: 200;
     height: var(--nav-h);
@@ -70,17 +72,20 @@ const CSS = `
   .nl:hover { color: var(--ink); }
   .nl.active { color: var(--acc); border-bottom-color: var(--acc); }
 
-  /* ── NAV AUTH ── */
-  .nav-auth { display: flex; align-items: center; gap: 16px; }
+  .nav-auth { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+  .nav-username {
+    font-size: .74rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); flex-shrink: 0;
+  }
   .btn-signin {
     font-family: var(--fb); font-size: .74rem; letter-spacing: .14em;
     text-transform: uppercase; color: var(--muted); background: none;
     border: none; cursor: pointer; transition: color var(--t); padding: 0;
+    white-space: nowrap;
   }
   .btn-signin:hover { color: var(--ink); }
-  .btn-sm { padding: 10px 20px; font-size: .7rem; }
+  .btn-sm { padding: 10px 20px; font-size: .7rem; white-space: nowrap; }
 
-  /* ── BUTTONS ── */
   .btn {
     display: inline-block; font-family: var(--fb); font-size: .74rem;
     font-weight: 500; letter-spacing: .18em; text-transform: uppercase;
@@ -91,9 +96,9 @@ const CSS = `
   .btn-primary { background: var(--acc); color: #fff; }
   .btn-primary:hover { background: #A0705A; transform: translateY(-1px); }
   .btn-outline { background: transparent; color: var(--acc-lt); border: 1px solid rgba(228,197,180,.4); }
-  .btn-outline:hover { border-color: var(--acc-lt); color: #fff; }
+  .btn-outline:hover { border-color: var(--acc-lt); color: var(--ink); }
+  .btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }
 
-  /* ── MODAL ── */
   .modal-overlay {
     position: fixed; inset: 0; z-index: 500;
     background: rgba(30,18,32,.55);
@@ -105,6 +110,7 @@ const CSS = `
   .modal-box {
     background: #fff; width: 100%; max-width: 440px;
     padding: 48px 48px 40px; position: relative; border-radius: 2px;
+    max-height: 90vh; overflow-y: auto;
   }
   .modal-close {
     position: absolute; top: 18px; right: 20px;
@@ -140,7 +146,6 @@ const CSS = `
     text-decoration: underline; text-underline-offset: 3px;
   }
 
-  /* ── SHARED ── */
   .eyebrow {
     font-size: .7rem; letter-spacing: .22em; text-transform: uppercase;
     color: var(--acc); margin-bottom: 14px; display: block;
@@ -151,7 +156,6 @@ const CSS = `
   }
   .section-title em { font-style: italic; color: var(--acc); }
 
-  /* ── HOME ── */
   #home {
     min-height: calc(100vh - var(--nav-h));
     background: var(--ink);
@@ -176,7 +180,6 @@ const CSS = `
   }
   .hero-btns { display: flex; gap: 14px; flex-wrap: wrap; }
 
-  /* ── ABOUT ── */
   #about { background: #fff; padding: 120px 56px; }
   .about-grid {
     max-width: 1080px; margin: 0 auto;
@@ -191,7 +194,6 @@ const CSS = `
   .pillar-name { font-family: var(--fd); font-size: 1.05rem; color: var(--ink); margin-bottom: 5px; }
   .pillar-desc { font-size: .8rem; color: var(--muted); font-weight: 300; line-height: 1.6; }
 
-  /* ── SERVICES ── */
   #services { background: var(--surface); padding: 120px 56px; }
   .srv-wrap { max-width: 1080px; margin: 0 auto; }
   .srv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 56px; }
@@ -213,7 +215,6 @@ const CSS = `
   }
   .srv-cta { margin-top: 56px; text-align: center; }
 
-  /* ── CONTACT ── */
   #contact { background: var(--ink); padding: 120px 56px; }
   .contact-grid {
     max-width: 1080px; margin: 0 auto;
@@ -248,8 +249,8 @@ const CSS = `
   .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--acc); }
   .field select option { background: #1E1220; color: #FAF6F3; }
   .field textarea { resize: vertical; min-height: 96px; }
+  .field input[readonly] { opacity: .6; cursor: not-allowed; }
 
-  /* ── FOOTER ── */
   footer {
     background: #120A13; padding: 28px 56px;
     display: flex; align-items: center; justify-content: space-between;
@@ -262,17 +263,21 @@ const CSS = `
   .footer-logo span { color: var(--acc); }
   .footer-copy { font-size: .72rem; color: rgba(250,246,243,.22); }
 
-  /* ── RESPONSIVE ── */
-  @media (max-width: 768px) {
+  @media (max-width: 1024px) {
+    .nav { padding: 0 32px; }
+    .nav-links { gap: 22px; }
+    .nl { font-size: .68rem; }
+  }
+  @media (max-width: 860px) {
     .nav { padding: 0 20px; }
-    .nav-links { gap: 18px; }
-    .nav-auth { gap: 10px; }
+    .nav-links { display: none; }
+  }
+  @media (max-width: 768px) {
     .btn-signin { display: none; }
-
+    .nav-username { display: none; }
     #home { grid-template-columns: 1fr; }
     .hero-img-col { display: none; }
     .hero-text { padding: 56px 20px 72px; }
-
     #about, #services, #contact { padding: 80px 20px; }
     .about-grid { grid-template-columns: 1fr; gap: 36px; }
     .about-img { aspect-ratio: 16/9; }
@@ -281,33 +286,28 @@ const CSS = `
     .contact-grid { grid-template-columns: 1fr; gap: 48px; }
     .form-row2 { grid-template-columns: 1fr; }
     footer { flex-direction: column; gap: 10px; text-align: center; padding: 24px 20px; }
-
     .modal-box { padding: 36px 24px 28px; }
     .mform-row2 { grid-template-columns: 1fr; }
   }
-
   @media (max-width: 480px) {
-    .nav-links { gap: 12px; }
-    .nl { font-size: .68rem; letter-spacing: .1em; }
     .logo { font-size: 1.1rem; }
+    .btn-sm { padding: 9px 16px; font-size: .66rem; }
   }
 `;
 
 export default function App() {
-  const [active, setActive] = useState("home");
-  const [modal, setModal]   = useState(null); // null | "login" | "register"
+  const { user, login, register, logout } = useAuth();
+  const [active, setActive]             = useState("home");
+  const [modal, setModal]               = useState(null);
+  const [modalError, setModalError]     = useState("");
+  const [modalLoading, setModalLoading] = useState(false);
 
   const homeRef     = useRef(null);
   const aboutRef    = useRef(null);
   const servicesRef = useRef(null);
   const contactRef  = useRef(null);
 
-  const refs = {
-    home:     homeRef,
-    about:    aboutRef,
-    services: servicesRef,
-    contact:  contactRef,
-  };
+  const refs = { home: homeRef, about: aboutRef, services: servicesRef, contact: contactRef };
 
   useEffect(() => {
     const onScroll = () => {
@@ -328,15 +328,50 @@ export default function App() {
     if (el) window.scrollTo({ top: Math.max(0, el.offsetTop - 64), behavior: "smooth" });
   };
 
+  const openModal = (type) => { setModalError(""); setModal(type); };
+
+  const handleLogin = async () => {
+    setModalError("");
+    setModalLoading(true);
+    try {
+      const email    = document.getElementById("login-email").value;
+      const password = document.getElementById("login-password").value;
+      const userData = await login({ email, password });
+      setModal(null);
+      if (userData.role === "Admin") window.location.href = "/admin";
+    } catch (err) {
+      setModalError(err.response?.data?.message || "Login failed.");
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const handleRegister = async () => {
+    setModalError("");
+    setModalLoading(true);
+    try {
+      const data = {
+        firstName:       document.getElementById("reg-firstName").value,
+        lastName:        document.getElementById("reg-lastName").value,
+        email:           document.getElementById("reg-email").value,
+        password:        document.getElementById("reg-password").value,
+        confirmPassword: document.getElementById("reg-confirm").value,
+      };
+      await register(data);
+      setModal("registerSuccess");
+    } catch (err) {
+      setModalError(err.response?.data?.message || "Registration failed.");
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
   return (
     <>
       <style>{CSS}</style>
 
-      {/* ─── NAVBAR ─── */}
       <nav className="nav">
-        <div className="logo" onClick={() => goTo("home")}>
-          Luxe<span>&</span>Lash
-        </div>
+        <div className="logo" onClick={() => goTo("home")}>Luxe<span>&</span>Lash</div>
         <ul className="nav-links">
           {NAV.map(({ id, label }) => (
             <li key={id} className={`nl${active === id ? " active" : ""}`} onClick={() => goTo(id)}>
@@ -345,59 +380,52 @@ export default function App() {
           ))}
         </ul>
         <div className="nav-auth">
-          <button className="btn-signin" onClick={() => setModal("login")}>Sign in</button>
-          <button className="btn btn-primary btn-sm" onClick={() => setModal("register")}>Register</button>
+          {user ? (
+            <>
+              <span className="nav-username">Hi, {user.firstName}</span>
+              {user.role === "Client" && (
+                <button className="btn-signin" onClick={() => setModal("appointments")}>
+                  My Appointments
+                </button>
+              )}
+              <button className="btn btn-primary btn-sm" onClick={logout}>Sign out</button>
+            </>
+          ) : (
+            <>
+              <button className="btn-signin" onClick={() => openModal("login")}>Sign in</button>
+              <button className="btn btn-primary btn-sm" onClick={() => openModal("register")}>Register</button>
+            </>
+          )}
         </div>
       </nav>
 
-      {/* ─── HOME ─── */}
       <section id="home" ref={homeRef}>
         <div className="hero-text">
           <p className="hero-label">Nails &amp; Lashes Studio · Belgrade</p>
-          <h1 className="hero-h1">
-            Where every<br />detail <em>shines.</em>
-          </h1>
+          <h1 className="hero-h1">Where every<br />detail <em>shines.</em></h1>
           <p className="hero-sub">
-            Professional nail art and lash extensions — crafted with
-            precision, care, and attention to every detail.
+            Professional nail art and lash extensions — crafted with precision, care, and attention to every detail.
           </p>
           <div className="hero-btns">
-            <button className="btn btn-primary" onClick={() => goTo("contact")}>Book a session</button>
+            <button className="btn btn-primary" onClick={() => user ? goTo("contact") : openModal("register")}>
+              Book a session
+            </button>
             <button className="btn btn-outline" onClick={() => goTo("services")}>View services</button>
           </div>
         </div>
-        <img
-          className="hero-img-col"
-          src="/pic1.jpg"
-          alt="Luxe and Lash studio"
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
+        <img className="hero-img-col" src="/pic1.jpg" alt="Luxe and Lash studio"
+          style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       </section>
 
-      {/* ─── ABOUT ─── */}
       <section id="about" ref={aboutRef}>
         <div className="about-grid">
-          <img
-            className="about-img"
-            src="/pic2.jpg"
-            alt="Luxe and Lash studio"
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
+          <img className="about-img" src="/pic2.jpg" alt="Luxe and Lash studio"
+            style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           <div className="about-body">
             <span className="eyebrow">About Us</span>
-            <h2 className="section-title">
-              The craft that<br /><em>makes the difference.</em>
-            </h2>
-            <p>
-              Luxe &amp; Lash was built on one simple idea — that every
-              visit should feel like an experience, not just a service.
-              A space that remembers every detail about you.
-            </p>
-            <p>
-              Our technicians bring years of focused training and a genuine
-              dedication to their craft. Every nail, every lash — done with
-              precision and care.
-            </p>
+            <h2 className="section-title">The craft that<br /><em>makes the difference.</em></h2>
+            <p>Luxe &amp; Lash was built on one simple idea — that every visit should feel like an experience, not just a service. A space that remembers every detail about you.</p>
+            <p>Our technicians bring years of focused training and a genuine dedication to their craft. Every nail, every lash — done with precision and care.</p>
             <div className="pillars">
               {[
                 { t: "Precision", d: "Every detail placed with intention and care." },
@@ -414,7 +442,6 @@ export default function App() {
         </div>
       </section>
 
-      {/* ─── SERVICES ─── */}
       <section id="services" ref={servicesRef}>
         <div className="srv-wrap">
           <span className="eyebrow">What We Offer</span>
@@ -424,10 +451,7 @@ export default function App() {
               <p className="cat-label">Nails</p>
               {NAILS.map(s => (
                 <div className="srv-row" key={s.name}>
-                  <div>
-                    <div className="srv-name">{s.name}</div>
-                    <div className="srv-desc">{s.desc}</div>
-                  </div>
+                  <div><div className="srv-name">{s.name}</div><div className="srv-desc">{s.desc}</div></div>
                   <div className="srv-price">{s.price}</div>
                 </div>
               ))}
@@ -436,30 +460,24 @@ export default function App() {
               <p className="cat-label">Lashes</p>
               {LASHES.map(s => (
                 <div className="srv-row" key={s.name}>
-                  <div>
-                    <div className="srv-name">{s.name}</div>
-                    <div className="srv-desc">{s.desc}</div>
-                  </div>
+                  <div><div className="srv-name">{s.name}</div><div className="srv-desc">{s.desc}</div></div>
                   <div className="srv-price">{s.price}</div>
                 </div>
               ))}
             </div>
           </div>
           <div className="srv-cta">
-            <button className="btn btn-primary" onClick={() => goTo("contact")}>
+            <button className="btn btn-primary" onClick={() => user ? goTo("contact") : openModal("register")}>
               Book your appointment
             </button>
           </div>
         </div>
       </section>
 
-      {/* ─── CONTACT ─── */}
       <section id="contact" ref={contactRef}>
         <div className="contact-grid">
           <div>
-            <h2 className="contact-title">
-              Let's create<br /><em>something beautiful.</em>
-            </h2>
+            <h2 className="contact-title">Let's create<br /><em>something beautiful.</em></h2>
             <div className="info-list">
               {[
                 { l: "Address", v: "123 Main Street\nNew York, NY 10001" },
@@ -474,61 +492,66 @@ export default function App() {
               ))}
             </div>
           </div>
-          <div className="form">
-            <div className="form-row2">
-              <div className="field">
-                <label>First name</label>
-                <input type="text" placeholder="Emma" />
-              </div>
-              <div className="field">
-                <label>Last name</label>
-                <input type="text" placeholder="Johnson" />
-              </div>
-            </div>
-            <div className="field">
-              <label>Email</label>
-              <input type="email" placeholder="emma@example.com" />
-            </div>
-            <div className="field">
-              <label>Service</label>
-              <select defaultValue="">
-                <option value="" disabled>Choose a service...</option>
-                <optgroup label="Nails">
-                  {NAILS.map(s => <option key={s.name}>{s.name}</option>)}
-                </optgroup>
-                <optgroup label="Lashes">
-                  {LASHES.map(s => <option key={s.name}>{s.name}</option>)}
-                </optgroup>
-              </select>
-            </div>
-            <div className="field">
-              <label>Message (optional)</label>
-              <textarea placeholder="Any special requests or notes..." />
-            </div>
-            <button
-              className="btn btn-primary"
-              style={{ marginTop: 6 }}
-              onClick={() => alert("Thank you! We'll be in touch soon. 💅")}
-            >
-              Send booking request
-            </button>
-          </div>
+          <BookingForm user={user} openModal={openModal} />
         </div>
       </section>
 
-      {/* ─── FOOTER ─── */}
       <footer>
         <div className="footer-logo">Luxe<span>&</span>Lash</div>
         <p className="footer-copy">© 2026 Luxe &amp; Lash Studio</p>
       </footer>
 
-      {/* ─── MODAL ─── */}
-      {modal && (
+      {modal && modal !== "appointments" && (
         <div className="modal-overlay" onClick={() => setModal(null)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setModal(null)}>✕</button>
 
-            {modal === "register" ? (
+            {modal === "registerSuccess" && (
+              <>
+                <div className="modal-header">
+                  <span className="eyebrow">Almost there!</span>
+                  <h2 className="modal-title">Check your <em>email.</em></h2>
+                </div>
+                <p style={{ color: "var(--muted)", fontSize: ".95rem", lineHeight: 1.7 }}>
+                  We sent a verification link to your email. Click it to activate your account, then sign in.
+                </p>
+                <button className="btn btn-primary" style={{ marginTop: 24, width: "100%" }}
+                  onClick={() => openModal("login")}>Go to Sign in</button>
+              </>
+            )}
+
+            {modal === "login" && (
+              <>
+                <div className="modal-header">
+                  <span className="eyebrow">Welcome back</span>
+                  <h2 className="modal-title">Sign <em>in.</em></h2>
+                </div>
+                <div className="mform">
+                  <div className="mfield">
+                    <label>Email</label>
+                    <input id="login-email" type="email" placeholder="emma@example.com" />
+                  </div>
+                  <div className="mfield">
+                    <label>Password</label>
+                    <input id="login-password" type="password" placeholder="••••••••" />
+                  </div>
+                  {modalError && <p style={{ color: "#e05c5c", fontSize: ".82rem" }}>{modalError}</p>}
+                  <button className="btn btn-primary" style={{ marginTop: 8 }}
+                    onClick={handleLogin} disabled={modalLoading}>
+                    {modalLoading ? "Signing in..." : "Sign in"}
+                  </button>
+                  <p className="modal-switch">
+                    Don't have an account?{" "}
+                    <span onClick={() => openModal("register")}>Create one</span>
+                  </p>
+                  <p className="modal-switch">
+                    <span onClick={() => openModal("forgot")}>Forgot password?</span>
+                  </p>
+                </div>
+              </>
+            )}
+
+            {modal === "register" && (
               <>
                 <div className="modal-header">
                   <span className="eyebrow">Join Us</span>
@@ -538,68 +561,260 @@ export default function App() {
                   <div className="mform-row2">
                     <div className="mfield">
                       <label>First name</label>
-                      <input type="text" placeholder="Emma" />
+                      <input id="reg-firstName" type="text" placeholder="Emma" />
                     </div>
                     <div className="mfield">
                       <label>Last name</label>
-                      <input type="text" placeholder="Johnson" />
+                      <input id="reg-lastName" type="text" placeholder="Johnson" />
                     </div>
                   </div>
                   <div className="mfield">
                     <label>Email</label>
-                    <input type="email" placeholder="emma@example.com" />
+                    <input id="reg-email" type="email" placeholder="emma@example.com" />
                   </div>
                   <div className="mfield">
                     <label>Password</label>
-                    <input type="password" placeholder="••••••••" />
+                    <input id="reg-password" type="password" placeholder="••••••••" />
                   </div>
                   <div className="mfield">
                     <label>Confirm password</label>
-                    <input type="password" placeholder="••••••••" />
+                    <input id="reg-confirm" type="password" placeholder="••••••••" />
                   </div>
-                  <button
-                    className="btn btn-primary"
-                    style={{ marginTop: 8 }}
-                    onClick={() => alert("Account created! 💅")}
-                  >
-                    Create account
+                  {modalError && <p style={{ color: "#e05c5c", fontSize: ".82rem" }}>{modalError}</p>}
+                  <button className="btn btn-primary" style={{ marginTop: 8 }}
+                    onClick={handleRegister} disabled={modalLoading}>
+                    {modalLoading ? "Creating account..." : "Create account"}
                   </button>
                   <p className="modal-switch">
                     Already have an account?{" "}
-                    <span onClick={() => setModal("login")}>Sign in</span>
-                  </p>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="modal-header">
-                  <span className="eyebrow">Welcome back</span>
-                  <h2 className="modal-title">Sign <em>in.</em></h2>
-                </div>
-                <div className="mform">
-                  <div className="mfield">
-                    <label>Email</label>
-                    <input type="email" placeholder="emma@example.com" />
-                  </div>
-                  <div className="mfield">
-                    <label>Password</label>
-                    <input type="password" placeholder="••••••••" />
-                  </div>
-                  <button
-                    className="btn btn-primary"
-                    style={{ marginTop: 8 }}
-                    onClick={() => setModal(null)}
-                  >
-                    Sign in
-                  </button>
-                  <p className="modal-switch">
-                    Don't have an account?{" "}
-                    <span onClick={() => setModal("register")}>Create one</span>
+                    <span onClick={() => openModal("login")}>Sign in</span>
                   </p>
                 </div>
               </>
             )}
+
+            {modal === "forgot" && <ForgotPasswordModal setModal={setModal} />}
           </div>
+        </div>
+      )}
+
+      {modal === "appointments" && <AppointmentsModal setModal={setModal} />}
+    </>
+  );
+}
+
+function BookingForm({ user, openModal }) {
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError]     = useState("");
+
+  const serviceMap = {
+    "Classic Manicure": 1, "Gel Manicure": 2,
+    "Acrylic Full Set": 3, "Nail Art & Design": 4,
+    "Classic Lashes": 5,  "Volume Lashes": 6,
+    "Mega Volume": 7,     "Lash Lift & Tint": 8,
+  };
+
+  const handleBook = async () => {
+    if (!user) { openModal("register"); return; }
+    setLoading(true);
+    setError("");
+    try {
+      const service = document.getElementById("book-service").value;
+      const date    = document.getElementById("book-date").value;
+      const time    = document.getElementById("book-time").value;
+      const notes   = document.getElementById("book-notes").value;
+      if (!service || !date || !time) { setError("Please fill in all required fields."); setLoading(false); return; }
+      const data = {
+        serviceId: serviceMap[service],
+        dateTime:  new Date(date + "T" + time).toISOString(),
+        notes,
+      };
+      await createAppointment(data);
+      setSuccess(true);
+    } catch (err) {
+      setError(err.response?.data?.message || "Booking failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (success) return (
+    <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 16 }}>
+      <h3 style={{ fontFamily: "var(--fd)", fontSize: "2rem", fontWeight: 300, color: "#FAF6F3" }}>
+        Request <em style={{ fontStyle: "italic", color: "var(--acc-lt)" }}>received!</em>
+      </h3>
+      <p style={{ color: "rgba(250,246,243,.6)", fontSize: ".95rem", lineHeight: 1.7 }}>
+        We'll confirm your appointment shortly via email.
+      </p>
+      <button className="btn btn-outline" onClick={() => setSuccess(false)}>Book another</button>
+    </div>
+  );
+
+  return (
+    <div className="form">
+      <div className="form-row2">
+        <div className="field">
+          <label>First name</label>
+          <input type="text" defaultValue={user?.firstName || ""} placeholder="Emma" readOnly={!!user} />
+        </div>
+        <div className="field">
+          <label>Last name</label>
+          <input type="text" defaultValue={user?.lastName || ""} placeholder="Johnson" readOnly={!!user} />
+        </div>
+      </div>
+      <div className="field">
+        <label>Service</label>
+        <select id="book-service" defaultValue="">
+          <option value="" disabled>Choose a service...</option>
+          <optgroup label="Nails">
+            {NAILS.map(s => <option key={s.name}>{s.name}</option>)}
+          </optgroup>
+          <optgroup label="Lashes">
+            {LASHES.map(s => <option key={s.name}>{s.name}</option>)}
+          </optgroup>
+        </select>
+      </div>
+      <div className="form-row2">
+        <div className="field">
+          <label>Date</label>
+          <input id="book-date" type="date" min={new Date().toISOString().split("T")[0]} />
+        </div>
+        <div className="field">
+          <label>Time</label>
+          <select id="book-time" defaultValue="">
+            <option value="" disabled>Select time...</option>
+            {["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00"].map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="field">
+        <label>Message (optional)</label>
+        <textarea id="book-notes" placeholder="Any special requests or notes..." />
+      </div>
+      {error && <p style={{ color: "#e05c5c", fontSize: ".82rem" }}>{error}</p>}
+      <button className="btn btn-primary" style={{ marginTop: 6 }}
+        onClick={handleBook} disabled={loading}>
+        {loading ? "Sending..." : user ? "Send booking request" : "Sign in to book"}
+      </button>
+    </div>
+  );
+}
+
+function AppointmentsModal({ setModal }) {
+  const [appointments, setAppointments] = useState([]);
+  const [loading, setLoading]           = useState(true);
+
+  useEffect(() => {
+    getMyAppointments()
+      .then(res => setAppointments(res.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleCancel = async (id) => {
+    if (!window.confirm("Cancel this appointment?")) return;
+    try {
+      await cancelAppointment(id);
+      setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: "Cancelled" } : a));
+    } catch {}
+  };
+
+  const statusColor = (s) => ({ Pending: "#C9936A", Confirmed: "#6aad7a", Cancelled: "#888", Rejected: "#e05c5c" }[s] || "#888");
+
+  return (
+    <div className="modal-overlay" onClick={() => setModal(null)}>
+      <div className="modal-box" style={{ maxWidth: 620 }} onClick={e => e.stopPropagation()}>
+        <button className="modal-close" onClick={() => setModal(null)}>✕</button>
+        <div className="modal-header">
+          <span className="eyebrow">Your bookings</span>
+          <h2 className="modal-title">My <em>appointments.</em></h2>
+        </div>
+        {loading && <p style={{ color: "var(--muted)" }}>Loading...</p>}
+        {!loading && appointments.length === 0 && (
+          <p style={{ color: "var(--muted)", fontSize: ".95rem" }}>You have no appointments yet.</p>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, maxHeight: 420, overflowY: "auto" }}>
+          {appointments.map(a => (
+            <div key={a.id} style={{
+              border: "1px solid var(--border)", borderRadius: 2, padding: "16px 20px",
+              display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16
+            }}>
+              <div>
+                <div style={{ fontFamily: "var(--fd)", fontSize: "1.1rem", marginBottom: 4 }}>{a.serviceName}</div>
+                <div style={{ fontSize: ".82rem", color: "var(--muted)", marginBottom: 4 }}>
+                  {new Date(a.dateTime).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                  {" "}at{" "}
+                  {new Date(a.dateTime).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                </div>
+                {a.adminReason && (
+                  <div style={{ fontSize: ".8rem", color: "var(--muted)", fontStyle: "italic" }}>Reason: {a.adminReason}</div>
+                )}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+                <span style={{ fontSize: ".7rem", letterSpacing: ".12em", textTransform: "uppercase", color: statusColor(a.status), fontWeight: 500 }}>
+                  {a.status}
+                </span>
+                {(a.status === "Pending" || a.status === "Confirmed") && (
+                  <button className="btn btn-outline"
+                    style={{ padding: "6px 14px", fontSize: ".66rem", color: "#e05c5c", borderColor: "rgba(224,92,92,.3)" }}
+                    onClick={() => handleCancel(a.id)}>
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ForgotPasswordModal({ setModal }) {
+  const [sent, setSent]       = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState("");
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      await forgotPassword(document.getElementById("forgot-email").value);
+      setSent(true);
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="modal-header">
+        <span className="eyebrow">Password reset</span>
+        <h2 className="modal-title">Forgot <em>password?</em></h2>
+      </div>
+      {sent ? (
+        <p style={{ color: "var(--muted)", fontSize: ".95rem", lineHeight: 1.7 }}>
+          If this email exists, a reset link has been sent. Check your inbox.
+        </p>
+      ) : (
+        <div className="mform">
+          <div className="mfield">
+            <label>Email</label>
+            <input id="forgot-email" type="email" placeholder="emma@example.com" />
+          </div>
+          {error && <p style={{ color: "#e05c5c", fontSize: ".82rem" }}>{error}</p>}
+          <button className="btn btn-primary" style={{ marginTop: 8 }}
+            onClick={handleSubmit} disabled={loading}>
+            {loading ? "Sending..." : "Send reset link"}
+          </button>
+          <p className="modal-switch">
+            <span onClick={() => setModal("login")}>Back to sign in</span>
+          </p>
         </div>
       )}
     </>
